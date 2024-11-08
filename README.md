@@ -1,0 +1,1 @@
+Here’s a Sudoku solver in C++. The goal of this project is to test different approaches to solve Sudoku puzzles and to parallelize them later on. For the moment, this project is still in development, so it is not functional.
