@@ -77,15 +77,8 @@ inline int place_number(int number, int row, int column, int box,
                         int bitBox[SIZE]) {
   number = convert_number_to_bit(number);
 
-  // Row and column placing verification
-  if (((number & bitRow[row]) != 0) || ((number & bitColumn[column]) != 0) ||
-      ((number & bitBox[box]) != 0)) {
-    // Placing is impossible
-    return 0;
-  } else {
-    // Placing is possible
-    return 1;
-  }
+  return (((number & bitRow[row]) != 0) ||
+          ((number & bitColumn[column]) != 0) || ((number & bitBox[box]) != 0));
 }
 
 int backtraking_solver() { return 1; }
@@ -112,7 +105,7 @@ int main() {
 
   print_grid(grid);
 
-  // Commencer la mesure du temps
+  // Start of time mesure
   auto start = high_resolution_clock::now();
 
   if (place_number(5, 1, 1, 0, bitRow, bitColumn, bitBox)) {
@@ -121,11 +114,11 @@ int main() {
     cout << "Fail" << endl;
   }
 
-  // Fin de la mesure du temps
+  // End of time mesure
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<milliseconds>(stop - start);
 
-  cout << "Temps d'exécution pour le brut de force: " << duration.count()
+  cout << "Execution time for backtracking algorithm : " << duration.count()
        << " ms" << endl;
 
   return 0;
