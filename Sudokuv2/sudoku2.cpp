@@ -2,6 +2,9 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <sstream>
+#include <limits>
+#include <cmath>
 
 using namespace std;
 using namespace std::chrono;
@@ -10,15 +13,27 @@ class Sudoku {
 public:
     explicit Sudoku(const std::string& filename);
     void printGrid() const;
+    bool solve();
+
 private:
-    int _grid_size;  
-    std::vector<std::vector<int>> _grid;  
+    int _grid_size;
+    int _box_size;
+    std::vector<std::vector<int>> _grid;
+    std::vector<int> _bitRows, _bitColumns, _bitBoxes;
+
     void loadGridFromFile(const std::string& filename);
-    inline void convert_grid_to_bit_row(std::vector<std::vector<int>> _grid, int (&bitRows)[SIZE]);
+    void convertGridToBitRepresentation();
+    bool placeNumber(int number, int row, int column) const;
+    bool backtrackingSolver();
 };
 
 Sudoku::Sudoku(const std::string& filename) {
     loadGridFromFile(filename);
+    _box_size = static_cast<int>(sqrt(_grid_size));
+    _bitRows.assign(_grid_size, 0);
+    _bitColumns.assign(_grid_size, 0);
+    _bitBoxes.assign(_grid_size, 0);
+    convertGridToBitRepresentation();
 }
 
 void Sudoku::loadGridFromFile(const std::string& filename) {
@@ -29,118 +44,65 @@ void Sudoku::loadGridFromFile(const std::string& filename) {
     }
 
     file >> _grid_size;
-    file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Ignore row end
+    file.ignore(numeric_limits<streamsize>::max(), '\n');
 
-    // Redimensionner le vecteur pour la grille
-    _grid.resize(_grid_size, std::vector<int>(_grid_size));
-
+    _grid.assign(_grid_size, std::vector<int>(_grid_size));
     for (int i = 0; i < _grid_size; ++i) {
         std::string line;
-        std::getline(file, line);
+        std::getline(file, line);  
+        std::istringstream line_stream(line); 
         for (int j = 0; j < _grid_size; ++j) {
-            _grid[i][j] = line[j] - '0';  // Convert the char in int
+            line_stream >> _grid[i][j];
         }
     }
 }
 
 void Sudoku::printGrid() const {
     for (int i = 0; i < _grid_size; ++i) {
+        if (i > 0 && i % _box_size == 0) {
+            cout << string((_grid_size * 2) + (_box_size - 1), '-') << endl;
+        }
         for (int j = 0; j < _grid_size; ++j) {
-            std::cout << _grid[i][j] << " ";
+            if (j > 0 && j % _box_size == 0) {
+                cout << "| ";
+            }
+            cout << _grid[i][j] << " ";
         }
-        std::cout << std::endl;
+        cout << endl;
     }
+    cout << endl;
 }
 
-/**
- * Fill bit rows array from the grid
- * @param grid Array representing the grid
- * @param bitRows Array representing rows of the grid in a "bit" version
- */
-inline void convert_grid_to_bit_row(int (&grid)[SIZE][SIZE], int (&bitRows)[SIZE]) {
-    for (int row = 0; row < SIZE; ++row) {
-        int bitmask = 0;
-        for (int col = 0; col < SIZE; ++col) {
-            int num = grid[row][col];
-            if (num > 0) bitmask |= (1 << (num - 1));
-        }
-        bitRows[row] = bitmask;
-    }
-}
-
-/**
- * Fill bit columns array from the grid
- * @param grid Array representing the grid
- * @param bitColumns Array representing colums of the grid in a "bit" version
- */
-inline void convert_grid_to_bit_column(int (&grid)[SIZE][SIZE], int (&bitColumns)[SIZE]) {
-    for (int col = 0; col < SIZE; ++col) {
-        int bitmask = 0;
-        for (int row = 0; row < SIZE; ++row) {
-            int num = grid[row][col];
-            if (num > 0) bitmask |= (1 << (num - 1));
-        }
-        bitColumns[col] = bitmask;
-    }
-}
-
-/**
- * Fill bit cubes array from the grid
- * @param grid Array representing the grid
- * @param bitBoxes Array representing cubes of the grid in a "bit" version
- */
-inline void convert_grid_to_bit_box(int (&grid)[SIZE][SIZE], int (&bitBoxes)[SIZE]) {
-    for (int i = 0; i < SIZE; ++i) {
-        int bitmask = 0;
-        int startRow = (i / N) * N;
-        int startCol = (i % N) * N;
-        for (int row = 0; row < N; ++row) {
-            for (int col = 0; col < N; ++col) {
-                int num = grid[startRow + row][startCol + col];
-                if (num > 0) bitmask |= (1 << (num - 1));
+void Sudoku::convertGridToBitRepresentation() {
+    for (int row = 0; row < _grid_size; ++row) {
+        for (int col = 0; col < _grid_size; ++col) {
+            int num = _grid[row][col];
+            if (num > 0) {
+                int bit = 1 << (num - 1);
+                _bitRows[row] |= bit;
+                _bitColumns[col] |= bit;
+                _bitBoxes[(row / _box_size) * _box_size + (col / _box_size)] |= bit;
             }
         }
-        bitBoxes[i] = bitmask;
     }
 }
 
-/**
- * Check if a number is placable in the current row and column and box
- * @param number The number we want to place
- * @param row The index of the row
- * @param column The index of the column
- * @param box The index of the box
- * @param bitRows Array representing rows of the grid in a "bit" version
- * @param bitColumns Array representing columns of the grid in a "bit" version
- * @param bitBoxes Array representing cubes of the grid in a "bit" version
- * @return True if the number is placable in the current row and column and box
- */
-inline bool place_number(int number, int row, int column, int box,
-                         const int (&bitRows)[SIZE], const int (&bitColumns)[SIZE],
-                         const int (&bitBoxes)[SIZE]) {
-    int bit = (1 << (number - 1));
-    return ((bit & bitRows[row]) == 0) &&
-           ((bit & bitColumns[column]) == 0) &&
-           ((bit & bitBoxes[box]) == 0);
+inline bool Sudoku::placeNumber(int number, int row, int column) const {
+    int bit = 1 << (number - 1);
+    int box = (row / _box_size) * _box_size + (column / _box_size);
+    return ((_bitRows[row] & bit) == 0) &&
+           ((_bitColumns[column] & bit) == 0) &&
+           ((_bitBoxes[box] & bit) == 0);
 }
 
-/**
- * Backtracking sudoku solver algorithm
- * @param grid Array representing the grid
- * @param bitRows Array representing rows of the grid in a "bit" version
- * @param bitColumns Array representing columns of the grid in a "bit" version
- * @param bitBoxes Array representing cubes of the grid in a "bit" version
- * @return True if the number is placable in the current row and column and box
- */
-bool backtraking_solver(int (&grid)[SIZE][SIZE], int (&bitRows)[SIZE], int (&bitColumns)[SIZE],
-                        int (&bitBoxes)[SIZE]) {
+bool Sudoku::backtrackingSolver() {
     int row = -1, col = -1;
     bool isEmpty = false;
 
-    // Find an empty cell
-    for (int i = 0; i < SIZE && !isEmpty; ++i) {
-        for (int j = 0; j < SIZE; ++j) {
-            if (grid[i][j] == 0) {
+    // Trouver une cellule vide en suivant une heuristique simple
+    for (int i = 0; i < _grid_size && !isEmpty; ++i) {
+        for (int j = 0; j < _grid_size; ++j) {
+            if (_grid[i][j] == 0) {
                 row = i;
                 col = j;
                 isEmpty = true;
@@ -149,33 +111,52 @@ bool backtraking_solver(int (&grid)[SIZE][SIZE], int (&bitRows)[SIZE], int (&bit
         }
     }
 
-    // No empty cells, the Sudoku is solved
     if (!isEmpty) return true;
 
-    int box = (row / N) * N + (col / N);  // Precompute the box index
-    for (int num = 1; num <= SIZE; ++num) {
-        if (place_number(num, row, col, box, bitRows, bitColumns, bitBoxes)) {
+    int box = (row / _box_size) * _box_size + (col / _box_size);
+    for (int num = 1; num <= _grid_size; ++num) {
+        if (placeNumber(num, row, col)) {
             int bit = 1 << (num - 1);
-            grid[row][col] = num;
-            bitRows[row] |= bit;
-            bitColumns[col] |= bit;
-            bitBoxes[box] |= bit;
+            _grid[row][col] = num;
+            _bitRows[row] |= bit;
+            _bitColumns[col] |= bit;
+            _bitBoxes[box] |= bit;
 
-            // Recursive call
-            if (backtraking_solver(grid, bitRows, bitColumns, bitBoxes)) return true;
+            if (backtrackingSolver()) return true;
 
-            // Backtrack
-            grid[row][col] = 0;
-            bitRows[row] &= ~bit;
-            bitColumns[col] &= ~bit;
-            bitBoxes[box] &= ~bit;
+            _grid[row][col] = 0;
+            _bitRows[row] &= ~bit;
+            _bitColumns[col] &= ~bit;
+            _bitBoxes[box] &= ~bit;
         }
     }
-  return false;
+    return false;
+}
+
+bool Sudoku::solve() {
+    auto start = high_resolution_clock::now();
+    bool solved = backtrackingSolver();
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<nanoseconds>(stop - start);
+
+    cout << "Execution time for backtracking algorithm : " << duration.count() << " ns" << endl << endl;
+    return solved;
 }
 
 int main() {
-    Sudoku sudoku("../Sudokus/9x9_easy.txt");
-    sudoku.printGrid();
+    vector<string> files = {
+        "../Sudokus/9x9_easy.txt",
+        "../Sudokus/9x9_hard.txt",
+        "../Sudokus/9x9_demon.txt"
+    };
+    
+    for (const auto& file : files) {
+        Sudoku sudoku(file);
+        sudoku.printGrid();
+        if (!sudoku.solve()) 
+            cout << "Aucune solution n'existe." << endl;
+        else
+            sudoku.printGrid();
+    }
     return 0;
 }
